@@ -1,8 +1,11 @@
-// src/pages/ProfilePage.tsx
 import { AppLayout } from "@/components/layout/AppLayout";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Shield, Clock, Key, User, Settings } from "lucide-react";
+import { useEffect, useState } from "react";
+import { activityApi, type ActivityItem } from "@/services/api";
+import { useNavigate } from "react-router-dom";
+import { cn } from "@/lib/utils";
 
 export default function ProfilePage() {
   const { user, logout } = useAuth();
@@ -19,6 +22,17 @@ export default function ProfilePage() {
     month: "long",
     year: "numeric",
   });
+
+
+  const navigate = useNavigate();
+  const [activities, setActivities] = useState<ActivityItem[]>([]);
+  const [loadingActivity, setLoadingActivity] = useState(true);
+
+  useEffect(() => {
+    activityApi.list()
+      .then(setActivities)
+      .finally(() => setLoadingActivity(false));
+  }, []);
 
   return (
     <AppLayout>
@@ -64,13 +78,13 @@ export default function ProfilePage() {
             </h3>
             <dl className="space-y-3">
               {[
-                { label: "Full Name",    value: user.name },
-                { label: "Email",        value: user.email },
-                { label: "Phone",        value: user.phone ?? "—" },
-                { label: "Role",         value: user.role },
+                { label: "Full Name", value: user.name },
+                { label: "Email", value: user.email },
+                { label: "Phone", value: user.phone ?? "—" },
+                { label: "Role", value: user.role },
                 { label: "Organisation", value: user.tenant.name },
-                { label: "Clinic Type",  value: user.tenant.clinic_type },
-                { label: "User ID",      value: `#${user.id}` },
+                { label: "Clinic Type", value: user.tenant.clinic_type },
+                // { label: "User ID",      value: `#${user.id}` },
               ].map((item) => (
                 <div key={item.label} className="flex justify-between gap-4">
                   <dt className="text-sm text-muted-foreground shrink-0">{item.label}</dt>
@@ -103,18 +117,64 @@ export default function ProfilePage() {
 
         {/* ── Recent Activity placeholder ───────────────────────────────── */}
         <div className="mt-6 animate-in animate-in-delay-2">
-          <div className="bg-card rounded-xl border border-border/50 shadow-sm p-6">
-            <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
-              <Clock className="h-4 w-4 text-muted-foreground" />
-              Recent Activity
-            </h3>
-            <div className="flex items-center justify-center h-20 text-muted-foreground">
-              <p className="text-sm">Activity log coming soon.</p>
+  <div className="bg-card rounded-xl border border-border/50 shadow-sm p-6">
+    <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
+      <Clock className="h-4 w-4 text-muted-foreground" />
+      Recent Activity
+    </h3>
+
+    {loadingActivity ? (
+      <div className="flex items-center justify-center h-20 text-muted-foreground">
+        <p className="text-sm">Loading activity...</p>
+      </div>
+    ) : activities.length === 0 ? (
+      <div className="flex items-center justify-center h-20 text-muted-foreground">
+        <p className="text-sm">No activity yet. Start by adding a client or a record.</p>
+      </div>
+    ) : (
+      <div className="space-y-3">
+        {activities.map((item) => (
+          <div
+            key={item.id}
+            onClick={() => item.link && navigate(item.link)}
+            className={cn(
+              "flex items-start gap-3",
+              item.link && "cursor-pointer group"
+            )}
+          >
+            <div className="mt-1.5 h-2 w-2 rounded-full bg-primary/60 shrink-0" />
+            <div className="flex-1 flex items-center justify-between gap-4">
+              <p className={cn(
+                "text-sm text-foreground",
+                item.link && "group-hover:text-primary transition-colors"
+              )}>
+                {item.description}
+              </p>
+              <span className="text-xs text-muted-foreground shrink-0">
+                {timeAgo(item.occurred_at)}
+              </span>
             </div>
           </div>
-        </div>
+        ))}
+      </div>
+    )}
+  </div>
+</div>
 
       </div>
     </AppLayout>
   );
+
+  // Helper — converts ISO string to relative time
+function timeAgo(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins  = Math.floor(diff / 60000);
+  const hours = Math.floor(diff / 3600000);
+  const days  = Math.floor(diff / 86400000);
+  if (mins  < 1)   return 'Just now';
+  if (mins  < 60)  return `${mins} min ago`;
+  if (hours < 24)  return `${hours} hr${hours > 1 ? 's' : ''} ago`;
+  if (days  === 1) return 'Yesterday';
+  return `${days} days ago`;
+}
 }

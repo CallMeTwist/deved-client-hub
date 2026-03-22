@@ -27,7 +27,7 @@ const navItems = [
     label: "Templates",
     path: "/templates",
     icon: FileText,
-    permission: "manage_templates", // ← was "view_templates" which doesn't exist
+    permission: "manage_templates",
   },
 ];
 

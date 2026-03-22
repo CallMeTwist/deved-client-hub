@@ -451,7 +451,7 @@ export default function ClientProfilePage() {
           </div>
         )}
 
-        {/* Notes / Files / Interactions — placeholder */}
+        {/* Notes / Files / Interactions - placeholder */}
         {/* ── Notes ────────────────────────────────────────────────────────── */}
         {activeTab === "notes" && (
           <div>
@@ -478,7 +478,7 @@ export default function ClientProfilePage() {
                 <RichTextEditor
                   value={noteContent}
                   onChange={setNoteContent}
-                  placeholder="Write your note here... Use the toolbar for bold, italic, lists etc."
+                  placeholder="Write your note here..."
                   minHeight="140px"
                 />
                 <div className="flex gap-2 mt-3">
@@ -500,14 +500,7 @@ export default function ClientProfilePage() {
                   >
                     {savingNote ? 'Saving...' : 'Save Note'}
                   </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setAddingNote(false);
-                      setNoteContent('');
-                    }}
-                  >
+                  <Button variant="outline" size="sm" onClick={() => { setAddingNote(false); setNoteContent(''); }}>
                     Cancel
                   </Button>
                 </div>
@@ -515,9 +508,7 @@ export default function ClientProfilePage() {
             )}
 
             {loadingNotes ? (
-              <div className="flex items-center justify-center h-32 text-muted-foreground">
-                Loading notes...
-              </div>
+              <div className="flex items-center justify-center h-32 text-muted-foreground">Loading notes...</div>
             ) : notes.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-32 text-muted-foreground gap-2">
                 <MessageSquare className="h-8 w-8 opacity-30" />
@@ -526,36 +517,19 @@ export default function ClientProfilePage() {
             ) : (
               <div className="space-y-4">
                 {notes.map((note) => (
-                  <div
+                  <NoteCard
                     key={note.id}
-                    className="bg-card rounded-xl border border-border/50 shadow-sm p-5"
-                  >
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-2">
-                        <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center">
-                          <span className="text-[10px] font-semibold text-primary">
-                            {note.created_by?.name
-                              .split(" ")
-                              .map((n) => n[0])
-                              .join("") ?? "?"}
-                          </span>
-                        </div>
-                        <span className="text-sm font-medium text-foreground">
-                          {note.created_by?.name ?? "Unknown"}
-                        </span>
-                      </div>
-                      <span className="text-xs text-muted-foreground">
-                        {new Date(note.created_at).toLocaleString()}
-                      </span>
-                    </div>
-                    {/* Render HTML content safely */}
-                    <div
-                      className="prose prose-sm max-w-none text-foreground
-                prose-strong:text-foreground prose-em:text-muted-foreground
-                prose-ul:mt-2 prose-li:mt-0.5 prose-p:my-1.5"
-                      dangerouslySetInnerHTML={{ __html: note.content }}
-                    />
-                  </div>
+                    note={note}
+                    clientId={Number(id)}
+                    currentUserId={user?.id ?? 0}
+                    canDelete={can("delete_records")}
+                    onUpdated={(updated) =>
+                      setNotes((prev) => prev.map((n) => (n.id === updated.id ? updated : n)))
+                    }
+                    onDeleted={(noteId) =>
+                      setNotes((prev) => prev.filter((n) => n.id !== noteId))
+                    }
+                  />
                 ))}
               </div>
             )}
@@ -845,3 +819,123 @@ function AddInteractionForm({ clientId, onSaved, onCancel }: AddInteractionFormP
     </div>
   );
 }
+
+ // ─── NoteCard sub-component ───────────────────────────────────────────────────
+
+  interface NoteCardProps {
+    note: ClientNote;
+    clientId: number;
+    currentUserId: number;
+    canDelete: boolean;
+    onUpdated: (note: ClientNote) => void;
+    onDeleted: (noteId: number) => void;
+  }
+
+  function NoteCard({ note, clientId, currentUserId, canDelete, onUpdated, onDeleted }: NoteCardProps) {
+    const [editing, setEditing] = useState(false);
+    const [content, setContent] = useState(note.content);
+    const [saving, setSaving] = useState(false);
+    const [deleting, setDeleting] = useState(false);
+
+    const isOwner = note.created_by?.id === currentUserId;
+
+    const handleSave = async () => {
+      if (!content || content === '<p></p>') return;
+      setSaving(true);
+      try {
+        const updated = await notesApi.update(clientId, note.id, content);
+        onUpdated(updated);
+        setEditing(false);
+      } finally {
+        setSaving(false);
+      }
+    };
+
+    const handleDelete = async () => {
+      if (!confirm('Delete this note? This cannot be undone.')) return;
+      setDeleting(true);
+      try {
+        await notesApi.delete(clientId, note.id);
+        onDeleted(note.id);
+      } finally {
+        setDeleting(false);
+      }
+    };
+
+    return (
+      <div className="bg-card rounded-xl border border-border/50 shadow-sm p-5">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center">
+              <span className="text-[10px] font-semibold text-primary">
+                {note.created_by?.name.split(' ').map((n) => n[0]).join('') ?? '?'}
+              </span>
+            </div>
+            <span className="text-sm font-medium text-foreground">
+              {note.created_by?.name ?? 'Unknown'}
+            </span>
+            {note.updated_at !== note.created_at && (
+              <span className="text-[10px] text-muted-foreground italic">edited</span>
+            )}
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="text-xs text-muted-foreground">
+              {new Date(note.created_at).toLocaleString()}
+            </span>
+            {/* Edit — only the creator can edit */}
+            {isOwner && !editing && (
+              <button
+                onClick={() => setEditing(true)}
+                className="ml-2 p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                title="Edit note"
+              >
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536M9 13l6.5-6.5a2 2 0 012.828 2.828L11.828 15.828a2 2 0 01-1.414.586H9v-2.414A2 2 0 019.586 13z" />
+                </svg>
+              </button>
+            )}
+            {/* Delete — only admin (delete_records) */}
+            {canDelete && !editing && (
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                title="Delete note"
+              >
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7V4h6v3M4 7h16" />
+                </svg>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Content — view or edit mode */}
+        {editing ? (
+          <div>
+            <RichTextEditor value={content} onChange={setContent} minHeight="120px" />
+            <div className="flex gap-2 mt-3">
+              <Button size="sm" disabled={saving} onClick={handleSave}>
+                {saving ? 'Saving...' : 'Save Changes'}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => { setEditing(false); setContent(note.content); }}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div
+            className="prose prose-sm max-w-none text-foreground
+            prose-strong:text-foreground prose-em:text-muted-foreground
+            prose-ul:mt-2 prose-li:mt-0.5 prose-p:my-1.5"
+            dangerouslySetInnerHTML={{ __html: note.content }}
+          />
+        )}
+      </div>
+    );
+  }

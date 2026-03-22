@@ -372,9 +372,10 @@ export const clientsService = {
 
 export interface ClientNote {
   id: number;
-  content: string;           // HTML string
+  content: string;  // HTML string
   created_by: { id: number; name: string } | null;
   created_at: string;
+  updated_at: string;
 }
 
 export const notesApi = {
@@ -388,6 +389,14 @@ export const notesApi = {
   create: async (clientId: number, content: string): Promise<ClientNote> => {
     const { data } = await api.post<{ data: ClientNote }>(
       `/clients/${clientId}/notes`,
+      { content }
+    );
+    return data.data;
+  },
+
+  update: async (clientId: number, noteId: number, content: string): Promise<ClientNote> => {
+    const { data } = await api.put<{ data: ClientNote }>(
+      `/clients/${clientId}/notes/${noteId}`,
       { content }
     );
     return data.data;
@@ -513,6 +522,62 @@ export const interactionsApi = {
 
   delete: async (clientId: number, interactionId: number): Promise<void> => {
     await api.delete(`/clients/${clientId}/interactions/${interactionId}`);
+  },
+};
+
+// ─── Activity ──────────────────────────────────────────────────────────────
+
+export interface ActivityItem {
+  id: number;
+  type: string;
+  description: string;
+  link: string | null;
+  occurred_at: string;
+}
+
+export const activityApi = {
+  list: async (): Promise<ActivityItem[]> => {
+    const { data } = await api.get<{ data: ActivityItem[] }>('/user/activity');
+    return data.data;
+  },
+};
+
+// ─── Notifications ────────────────────────────────────────────────────────────
+
+export type NotificationType =
+  | 'client_created'
+  | 'note_added'
+  | 'file_uploaded'
+  | 'record_created'
+  | 'interaction_logged'
+  | 'template_created';
+
+export interface AppNotification {
+  id: number;
+  type: NotificationType | string;
+  title: string;
+  message: string;
+  link: string | null;
+  read: boolean;
+  occurred_at: string;
+}
+
+export const notificationsApi = {
+  list: async (): Promise<{ data: AppNotification[]; unread_count: number }> => {
+    const { data } = await api.get('/notifications');
+    return data;
+  },
+
+  markRead: async (id: number): Promise<void> => {
+    await api.patch(`/notifications/${id}/read`);
+  },
+
+  markAllRead: async (): Promise<void> => {
+    await api.patch('/notifications/read-all');
+  },
+
+  dismiss: async (id: number): Promise<void> => {
+    await api.delete(`/notifications/${id}`);
   },
 };
 
