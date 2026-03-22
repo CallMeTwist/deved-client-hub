@@ -368,4 +368,152 @@ export const clientsService = {
   delete: clientsApi.delete,
 };
 
+// ─── Notes ────────────────────────────────────────────────────────────────────
+
+export interface ClientNote {
+  id: number;
+  content: string;           // HTML string
+  created_by: { id: number; name: string } | null;
+  created_at: string;
+}
+
+export const notesApi = {
+  list: async (clientId: number): Promise<ClientNote[]> => {
+    const { data } = await api.get<{ data: ClientNote[] }>(
+      `/clients/${clientId}/notes`
+    );
+    return data.data;
+  },
+
+  create: async (clientId: number, content: string): Promise<ClientNote> => {
+    const { data } = await api.post<{ data: ClientNote }>(
+      `/clients/${clientId}/notes`,
+      { content }
+    );
+    return data.data;
+  },
+
+  delete: async (clientId: number, noteId: number): Promise<void> => {
+    await api.delete(`/clients/${clientId}/notes/${noteId}`);
+  },
+};
+
+// ─── Files ────────────────────────────────────────────────────────────────────
+
+export interface ClientFile {
+  id: number;
+  name: string;
+  mime_type: string | null;
+  size: number;
+  formatted_size: string;
+  uploaded_by: { id: number; name: string } | null;
+  created_at: string;
+}
+
+export const filesApi = {
+  list: async (clientId: number): Promise<ClientFile[]> => {
+    const { data } = await api.get<{ data: ClientFile[] }>(
+      `/clients/${clientId}/files`
+    );
+    return data.data;
+  },
+
+  upload: async (clientId: number, file: File): Promise<ClientFile> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const { data } = await api.post<{ data: ClientFile }>(
+      `/clients/${clientId}/files`,
+      formData,
+      { headers: { 'Content-Type': 'multipart/form-data' } }
+    );
+    return data.data;
+  },
+
+  preview: async (clientId: number, fileId: number, fileName: string): Promise<void> => {
+    const token = localStorage.getItem('auth_token');
+    const response = await fetch(
+      `${import.meta.env.VITE_API_URL ?? 'http://localhost:8000/api'}/clients/${clientId}/files/${fileId}/preview`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+
+    if (!response.ok) throw new Error('Preview failed');
+
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+    // Note: can't revoke immediately since it's opened in a new tab
+    // The URL will be garbage collected when the tab closes
+  },
+
+  /**
+   * Downloads a file by fetching it with the Bearer token,
+   * then triggering a browser download via a blob URL.
+   */
+  download: async (clientId: number, fileId: number, fileName: string): Promise<void> => {
+    const token = localStorage.getItem('auth_token');
+    const response = await fetch(
+      `${import.meta.env.VITE_API_URL ?? 'http://localhost:8000/api'}/clients/${clientId}/files/${fileId}/download`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+
+    if (!response.ok) throw new Error('Download failed');
+
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  },
+
+  delete: async (clientId: number, fileId: number): Promise<void> => {
+    await api.delete(`/clients/${clientId}/files/${fileId}`);
+  },
+};
+
+// ─── Interactions ─────────────────────────────────────────────────────────────
+
+export type InteractionType = 'call' | 'email' | 'visit' | 'meeting';
+
+export interface ClientInteraction {
+  id: number;
+  type: InteractionType;
+  summary: string;
+  duration: string | null;     // "45 min" or null
+  interacted_at: string;
+  created_by: { id: number; name: string } | null;
+}
+
+export const interactionsApi = {
+  list: async (clientId: number): Promise<ClientInteraction[]> => {
+    const { data } = await api.get<{ data: ClientInteraction[] }>(
+      `/clients/${clientId}/interactions`
+    );
+    return data.data;
+  },
+
+  create: async (
+    clientId: number,
+    payload: {
+      type: InteractionType;
+      summary: string;
+      interacted_at?: string;
+      duration_minutes?: number;
+    }
+  ): Promise<ClientInteraction> => {
+    const { data } = await api.post<{ data: ClientInteraction }>(
+      `/clients/${clientId}/interactions`,
+      payload
+    );
+    return data.data;
+  },
+
+  delete: async (clientId: number, interactionId: number): Promise<void> => {
+    await api.delete(`/clients/${clientId}/interactions/${interactionId}`);
+  },
+};
+
 export default api;
