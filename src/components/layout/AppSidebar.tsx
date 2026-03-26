@@ -1,10 +1,11 @@
-// src/components/layout/AppSidebar.tsx
 import {
   LayoutDashboard,
   Users,
   FileText,
   LogOut,
   ChevronLeft,
+  UserCog,
+  Shield,
 } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
@@ -29,6 +30,19 @@ const navItems = [
     icon: FileText,
     permission: "manage_templates",
   },
+  // Admin-only
+  {
+    label: "Users",
+    path: "/users",
+    icon: UserCog,
+    permission: "manage_users",
+  },
+  {
+    label: "Roles",
+    path: "/roles",
+    icon: Shield,
+    permission: "manage_users",
+  },
 ];
 
 export function AppSidebar() {
@@ -36,9 +50,8 @@ export function AppSidebar() {
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
 
-  // Derive helpers from the real user object
-  const can     = (permission: string) => user?.permissions?.includes(permission) ?? false;
-  const hasRole = (role: string)       => user?.role === role;
+  const can = (permission: string) =>
+    user?.permissions?.includes(permission) ?? false;
 
   const initials = user?.name
     .split(" ")
@@ -70,7 +83,6 @@ export function AppSidebar() {
       {/* Nav */}
       <nav className="flex-1 py-4 px-2 space-y-1 overflow-y-auto">
         {navItems.map((item) => {
-          // Hide item if user lacks the required permission
           if (item.permission && !can(item.permission)) return null;
 
           const isActive =
@@ -116,9 +128,7 @@ export function AppSidebar() {
                 <p className="text-xs font-medium text-sidebar-accent-foreground truncate">
                   {user.name}
                 </p>
-                <p className="text-xs text-sidebar-foreground capitalize">
-                  {user.role}
-                </p>
+                <p className="text-xs text-sidebar-foreground capitalize">{user.role}</p>
               </div>
             )}
           </NavLink>
@@ -128,12 +138,7 @@ export function AppSidebar() {
           onClick={() => setCollapsed(!collapsed)}
           className="flex items-center gap-3 w-full px-3 py-2 rounded-lg text-sm text-sidebar-foreground hover:bg-sidebar-accent/50 transition-colors"
         >
-          <ChevronLeft
-            className={cn(
-              "h-4 w-4 transition-transform",
-              collapsed && "rotate-180"
-            )}
-          />
+          <ChevronLeft className={cn("h-4 w-4 transition-transform", collapsed && "rotate-180")} />
           {!collapsed && <span>Collapse</span>}
         </button>
 

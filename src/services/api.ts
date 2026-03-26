@@ -146,7 +146,7 @@ const api: AxiosInstance = axios.create({
 
 // Attach Bearer token on every request
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('auth_token');
+  const token = sessionStorage.getItem('auth_token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -158,7 +158,7 @@ api.interceptors.response.use(
   (res) => res,
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem('auth_token');
+      sessionStorage.removeItem('auth_token');
       window.location.href = '/login';
     }
     return Promise.reject(error);
@@ -171,7 +171,7 @@ export const authApi = {
   /**
    * POST /api/auth/login
    * Usage: const { user, token } = await authApi.login(email, password);
-   *        localStorage.setItem('auth_token', token);
+   *        sessionStorage.setItem('auth_token', token);
    */
   login: async (email: string, password: string): Promise<LoginResponse> => {
     const { data } = await api.post<LoginResponse>('/auth/login', { email, password });
@@ -180,7 +180,7 @@ export const authApi = {
 
   logout: async (): Promise<void> => {
     await api.post('/auth/logout');
-    localStorage.removeItem('auth_token');
+    sessionStorage.removeItem('auth_token');
   },
 
   /**
@@ -324,6 +324,23 @@ export const recordsApi = {
     );
     return data.data;
   },
+
+  update: async (
+    clientId: number,
+    recordId: number,
+    payload: {
+      data?: Record<string, unknown>;
+      notes?: string;
+      status?: string;
+      recorded_at?: string;
+    }
+  ): Promise<ClinicalRecord> => {
+    const { data } = await api.put<{ data: ClinicalRecord }>(
+      `/clients/${clientId}/records/${recordId}`,
+      payload
+    );
+    return data.data;
+  },
 };
 
 // ─── Aliases to match component imports ──────────────────────────────────────
@@ -439,7 +456,7 @@ export const filesApi = {
   },
 
   preview: async (clientId: number, fileId: number, fileName: string): Promise<void> => {
-    const token = localStorage.getItem('auth_token');
+    const token = sessionStorage.getItem('auth_token');
     const response = await fetch(
       `${import.meta.env.VITE_API_URL ?? 'http://localhost:8000/api'}/clients/${clientId}/files/${fileId}/preview`,
       { headers: { Authorization: `Bearer ${token}` } }
@@ -459,7 +476,7 @@ export const filesApi = {
    * then triggering a browser download via a blob URL.
    */
   download: async (clientId: number, fileId: number, fileName: string): Promise<void> => {
-    const token = localStorage.getItem('auth_token');
+    const token = sessionStorage.getItem('auth_token');
     const response = await fetch(
       `${import.meta.env.VITE_API_URL ?? 'http://localhost:8000/api'}/clients/${clientId}/files/${fileId}/download`,
       { headers: { Authorization: `Bearer ${token}` } }
@@ -481,6 +498,9 @@ export const filesApi = {
   delete: async (clientId: number, fileId: number): Promise<void> => {
     await api.delete(`/clients/${clientId}/files/${fileId}`);
   },
+
+  renameFile: (clientId: number | string, fileId: number | string, name: string) =>
+  api.patch(`/clients/${clientId}/files/${fileId}/rename`, { name }),
 };
 
 // ─── Interactions ─────────────────────────────────────────────────────────────
@@ -515,6 +535,23 @@ export const interactionsApi = {
   ): Promise<ClientInteraction> => {
     const { data } = await api.post<{ data: ClientInteraction }>(
       `/clients/${clientId}/interactions`,
+      payload
+    );
+    return data.data;
+  },
+
+  update: async (
+    clientId: number,
+    interactionId: number,
+    payload: {
+      type?: InteractionType;
+      summary?: string;
+      interacted_at?: string;
+      duration_minutes?: number;
+    }
+  ): Promise<ClientInteraction> => {
+    const { data } = await api.put<{ data: ClientInteraction }>(
+      `/clients/${clientId}/interactions/${interactionId}`,
       payload
     );
     return data.data;
@@ -578,6 +615,91 @@ export const notificationsApi = {
 
   dismiss: async (id: number): Promise<void> => {
     await api.delete(`/notifications/${id}`);
+  },
+};
+
+// ─── Users ────────────────────────────────────────────────────────────────────
+
+export interface TenantUser {
+  id: number;
+  name: string;
+  email: string;
+  phone: string | null;
+  is_active: boolean;
+  role: string;
+  permissions: string[];
+  created_at: string;
+  activity?: ActivityItem[];
+}
+
+export const usersApi = {
+  list: async (): Promise<TenantUser[]> => {
+    const { data } = await api.get<{ data: TenantUser[] }>('/users');
+    return data.data;
+  },
+
+  get: async (id: number): Promise<TenantUser> => {
+    const { data } = await api.get<{ data: TenantUser }>(`/users/${id}`);
+    return data.data;
+  },
+
+  create: async (payload: {
+    name: string;
+    email: string;
+    password: string;
+    phone?: string;
+    role: string;
+    is_active?: boolean;
+  }): Promise<TenantUser> => {
+    const { data } = await api.post<{ data: TenantUser }>('/users', payload);
+    return data.data;
+  },
+
+  update: async (id: number, payload: Partial<{
+    name: string;
+    email: string;
+    password: string;
+    phone: string;
+    role: string;
+    is_active: boolean;
+  }>): Promise<TenantUser> => {
+    const { data } = await api.put<{ data: TenantUser }>(`/users/${id}`, payload);
+    return data.data;
+  },
+
+  toggleActive: async (id: number): Promise<{ is_active: boolean }> => {
+    const { data } = await api.patch(`/users/${id}/toggle-active`);
+    return data;
+  },
+};
+
+// ─── Roles ────────────────────────────────────────────────────────────────────
+
+export interface AppRole {
+  id: number;
+  name: string;
+  permissions: string[];
+}
+
+export const rolesApi = {
+  list: async (): Promise<AppRole[]> => {
+    const { data } = await api.get<{ data: AppRole[] }>('/roles');
+    return data.data;
+  },
+
+  listPermissions: async (): Promise<string[]> => {
+    const { data } = await api.get<{ data: string[] }>('/permissions');
+    return data.data;
+  },
+
+  create: async (payload: { name: string; permissions: string[] }): Promise<AppRole> => {
+    const { data } = await api.post<{ data: AppRole }>('/roles', payload);
+    return data.data;
+  },
+
+  update: async (id: number, permissions: string[]): Promise<AppRole> => {
+    const { data } = await api.put<{ data: AppRole }>(`/roles/${id}`, { permissions });
+    return data.data;
   },
 };
 

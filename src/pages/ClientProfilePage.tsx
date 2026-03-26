@@ -19,6 +19,9 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
 import { RichTextEditor } from "@/components/RichTextEditor";
+import { CollapsibleNote } from "@/components/CollapsibleNote";
+import { EditRecordModal } from "@/components/EditRecordModal";
+import { useLocation } from "react-router-dom";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -62,6 +65,7 @@ export default function ClientProfilePage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const location = useLocation();
 
   // Permission helper derived from the real user object
   const can = (permission: string) =>
@@ -86,6 +90,10 @@ export default function ClientProfilePage() {
   const [savingNote, setSavingNote] = useState(false);
   const [showAddInteraction, setShowAddInteraction] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [editingRecord, setEditingRecord] = useState<ClinicalRecord | null>(null);
+  const [editingInteraction, setEditingInteraction] = useState<ClientInteraction | null>(null);
+  const [renamingFile, setRenamingFile] = useState<ClientFile | null>(null);
+  const [renameValue, setRenameValue] = useState('');
 
   // Fetch client on mount
   useEffect(() => {
@@ -135,6 +143,14 @@ export default function ClientProfilePage() {
       .finally(() => setLoadingInteractions(false));
   }, [activeTab, id]);
 
+  useEffect(() => {
+    const hash = location.hash.replace('#', '') as Tab;
+    const validTabs: Tab[] = ['records', 'notes', 'files', 'interactions'];
+    if (hash && validTabs.includes(hash)) {
+      setActiveTab(hash);
+    }
+  }, [location.hash]);
+
   // Delete handler
   const handleDelete = async () => {
     if (!id || !confirm(`Delete ${client?.full_name}? This cannot be undone.`)) return;
@@ -144,6 +160,38 @@ export default function ClientProfilePage() {
       navigate("/clients");
     } finally {
       setDeleting(false);
+    }
+  };
+
+  //   const handleRename = async (file: ClientFile) => {
+  //   if (!renameValue.trim() || !id) return;
+  //   try {
+  //     await api.patch(`/clients/${id}/files/${file.id}/rename`, { name: renameValue });
+  //     setFiles((prev) => prev.map((f) => (f.id === file.id ? { ...f, name: renameValue } : f)));
+  //     setRenamingFile(null);
+  //   } catch {
+  //     alert('Rename failed.');
+  //   }
+  // };
+  const handleRename = async (file: ClientFile) => {
+    if (!renameValue.trim() || !id) return;
+    try {
+      await filesApi.renameFile(id, file.id, renameValue);
+      setFiles((prev) => prev.map((f) => (f.id === file.id ? { ...f, name: renameValue } : f)));
+      setRenamingFile(null);
+    } catch {
+      alert('Rename failed.');
+    }
+  };
+
+  // Add delete handler
+  const handleDeleteFile = async (file: ClientFile) => {
+    if (!confirm(`Delete "${file.name}"? This cannot be undone.`) || !id) return;
+    try {
+      await filesApi.delete(Number(id), file.id);
+      setFiles((prev) => prev.filter((f) => f.id !== file.id));
+    } catch {
+      alert('Delete failed.');
     }
   };
 
@@ -399,36 +447,52 @@ export default function ClientProfilePage() {
                     key={rec.id}
                     className="bg-card rounded-xl border border-border/50 shadow-sm p-5 hover:shadow-md transition-shadow"
                   >
+                    {/* ── Header: left = name/badges, right = date + edit ── */}
                     <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-3">
-                        <h4 className="text-sm font-semibold text-foreground capitalize">
+
+                      {/* Left */}
+                      <div className="flex items-center gap-2 flex-wrap min-w-0">
+                        <h4 className="text-sm font-semibold text-foreground capitalize truncate">
                           {rec.template_key.replace(/_/g, " ")}
                         </h4>
                         <span className={cn(
-                          "text-xs font-medium px-2 py-0.5 rounded-full capitalize",
+                          "text-xs font-medium px-2 py-0.5 rounded-full capitalize shrink-0",
                           recordStatusColors[rec.status] ?? "bg-muted text-muted-foreground"
                         )}>
                           {rec.status}
                         </span>
-                        <span className="text-xs text-muted-foreground">
+                        <span className="text-xs text-muted-foreground shrink-0">
                           v{rec.template_version}
                         </span>
                       </div>
-                      <span className="text-xs text-muted-foreground">
-                        {new Date(rec.recorded_at).toLocaleDateString()}
-                      </span>
+
+                      {/* Right — date and edit button always together at the end */}
+                      <div className="flex items-center gap-2 shrink-0 ml-3">
+                        <span className="text-xs text-muted-foreground">
+                          {new Date(rec.recorded_at).toLocaleDateString()}
+                        </span>
+                        {(rec.created_by?.id === user?.id || user?.role === "admin") && (
+                          <button
+                            onClick={() => setEditingRecord(rec)}
+                            className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                            title="Edit record"
+                          >
+                            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536M9 13l6.5-6.5a2 2 0 012.828 2.828L11.828 15.828a2 2 0 01-1.414.586H9v-2.414A2 2 0 019.586 13z" />
+                            </svg>
+                          </button>
+                        )}
+                      </div>
                     </div>
 
-                    {/* Dynamic data from the template schema */}
+                    {/* Dynamic data */}
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                       {Object.entries(rec.data).map(([key, val]) => (
                         <div key={key}>
                           <p className="text-[11px] text-muted-foreground capitalize">
                             {key.replace(/_/g, " ")}
                           </p>
-                          <p className="text-sm font-medium text-foreground">
-                            {String(val)}
-                          </p>
+                          <p className="text-sm font-medium text-foreground">{String(val)}</p>
                         </div>
                       ))}
                     </div>
@@ -438,7 +502,6 @@ export default function ClientProfilePage() {
                         {rec.notes}
                       </p>
                     )}
-
                     {rec.created_by && (
                       <p className="mt-2 text-[11px] text-muted-foreground">
                         Recorded by {rec.created_by.name}
@@ -537,6 +600,7 @@ export default function ClientProfilePage() {
         )}
 
         {/* ── Files ────────────────────────────────────────────────────────── */}
+
         {activeTab === "files" && (
           <div>
             <div className="flex items-center justify-between mb-4">
@@ -586,55 +650,81 @@ export default function ClientProfilePage() {
             ) : (
               <div className="space-y-2">
                 {files.map((file) => (
-                  <div
-                    key={file.id}
-                    className="bg-card rounded-xl border border-border/50 shadow-sm p-4 flex items-center gap-4 hover:shadow-md transition-shadow"
-                  >
-                    <div className="h-10 w-10 rounded-lg bg-muted flex items-center justify-center text-lg shrink-0">
-                      {mimeTypeIcon(file.mime_type)}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground truncate">
-                        {file.name}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {file.formatted_size} · Uploaded by {file.uploaded_by?.name ?? "Unknown"}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      <span className="text-xs text-muted-foreground mr-2">
-                        {new Date(file.created_at).toLocaleDateString()}
-                      </span>
-
-                      {(file.mime_type?.startsWith('image/') || file.mime_type === 'application/pdf') && (
-                        <button
-                          className="p-1.5 rounded-md hover:bg-muted transition-colors active:scale-95"
-                          title="View"
-                          onClick={async () => {
-                            try {
-                              await filesApi.preview(Number(id), file.id, file.name);
-                            } catch {
-                              alert('Could not open file preview.');
-                            }
-                          }}
-                        >
-                          <Eye className="h-4 w-4 text-muted-foreground" />
-                        </button>
-                      )}
-                      <button
-                        className="p-1.5 rounded-md hover:bg-muted transition-colors active:scale-95"
-                        title="Download"
-                        onClick={async () => {
-                          try {
-                            await filesApi.download(Number(id), file.id, file.name);
-                          } catch {
-                            alert('Download failed. Please try again.');
-                          }
-                        }}
-                      >
-                        <Download className="h-4 w-4 text-muted-foreground" />
-                      </button>
-                    </div>
+                  <div key={file.id} className="bg-card rounded-xl border border-border/50 shadow-sm p-4">
+                    {renamingFile?.id === file.id ? (
+                      // Rename mode
+                      <div className="flex items-center gap-2">
+                        <input
+                          value={renameValue}
+                          onChange={(e) => setRenameValue(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && handleRename(file)}
+                          className="flex-1 h-9 px-3 rounded-lg bg-muted/40 border border-border text-sm focus:outline-none focus:ring-2 focus:ring-ring/30"
+                          autoFocus
+                        />
+                        <Button size="sm" onClick={() => handleRename(file)}>Save</Button>
+                        <Button variant="outline" size="sm" onClick={() => setRenamingFile(null)}>Cancel</Button>
+                      </div>
+                    ) : (
+                      // View mode
+                      <div className="flex items-center gap-4">
+                        <div className="h-10 w-10 rounded-lg bg-muted flex items-center justify-center text-lg shrink-0">
+                          {mimeTypeIcon(file.mime_type)}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-foreground truncate">{file.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {file.formatted_size} · Uploaded by {file.uploaded_by?.name ?? "Unknown"}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <span className="text-xs text-muted-foreground mr-1">
+                            {new Date(file.created_at).toLocaleDateString()}
+                          </span>
+                          {/* Preview */}
+                          {(file.mime_type?.startsWith('image/') || file.mime_type === 'application/pdf') && (
+                            <button
+                              className="p-1.5 rounded-md hover:bg-muted transition-colors"
+                              title="View"
+                              onClick={async () => { try { await filesApi.preview(Number(id), file.id, file.name); } catch { alert('Preview failed.'); } }}
+                            >
+                              <Eye className="h-4 w-4 text-muted-foreground" />
+                            </button>
+                          )}
+                          {/* Download */}
+                          <button
+                            className="p-1.5 rounded-md hover:bg-muted transition-colors"
+                            title="Download"
+                            onClick={async () => { try { await filesApi.download(Number(id), file.id, file.name); } catch { alert('Download failed.'); } }}
+                          >
+                            <Download className="h-4 w-4 text-muted-foreground" />
+                          </button>
+                          {/* Rename — owner or admin */}
+                          {(file.uploaded_by?.id === user?.id || can("edit_records")) && (
+                            <button
+                              className="p-1.5 rounded-md hover:bg-muted transition-colors"
+                              title="Rename"
+                              onClick={() => { setRenamingFile(file); setRenameValue(file.name); }}
+                            >
+                              <svg className="h-4 w-4 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536M9 13l6.5-6.5a2 2 0 012.828 2.828L11.828 15.828a2 2 0 01-1.414.586H9v-2.414A2 2 0 019.586 13z" />
+                              </svg>
+                            </button>
+                          )}
+                          {/* Delete — admin only */}
+                          {can("delete_records") && (
+                            <button
+                              className="p-1.5 rounded-md hover:bg-destructive/10 hover:text-destructive transition-colors"
+                              title="Delete"
+                              onClick={() => handleDeleteFile(file)}
+                            >
+                              <svg className="h-4 w-4 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7V4h6v3M4 7h16" />
+                              </svg>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -689,35 +779,68 @@ export default function ClientProfilePage() {
                 <div className="space-y-4">
                   {interactions.map((interaction) => {
                     const config = interactionTypeConfig[interaction.type];
+                    const isEditing = editingInteraction?.id === interaction.id;
+                    const isOwner = interaction.created_by?.id === user?.id;
+
                     return (
                       <div key={interaction.id} className="relative pl-10">
                         <div className="absolute left-2.5 top-4 h-3 w-3 rounded-full border-2 border-card bg-primary" />
                         <div className="bg-card rounded-xl border border-border/50 shadow-sm p-4">
-                          <div className="flex items-center gap-2 mb-2">
-                            <span
-                              className={cn(
-                                "text-xs font-medium px-2 py-0.5 rounded-full",
-                                config?.color ?? "bg-muted text-muted-foreground"
-                              )}
-                            >
-                              {config?.label ?? interaction.type}
-                            </span>
-                            {interaction.duration && (
-                              <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                                <Clock className="h-3 w-3" />
-                                {interaction.duration}
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-sm text-foreground">{interaction.summary}</p>
-                          <div className="flex items-center justify-between mt-2">
-                            <span className="text-xs text-muted-foreground">
-                              By {interaction.created_by?.name ?? "Unknown"}
-                            </span>
-                            <span className="text-xs text-muted-foreground">
-                              {new Date(interaction.interacted_at).toLocaleString()}
-                            </span>
-                          </div>
+                          {isEditing ? (
+                            // ── Edit mode ───────────────────────────────────────────────
+                            <EditInteractionInline
+                              interaction={interaction}
+                              clientId={Number(id)}
+                              onSaved={(updated) => {
+                                setInteractions((prev) =>
+                                  prev.map((i) => (i.id === updated.id ? updated : i))
+                                );
+                                setEditingInteraction(null);
+                              }}
+                              onCancel={() => setEditingInteraction(null)}
+                            />
+                          ) : (
+                            // ── View mode ────────────────────────────────────────────────
+                            <>
+                              <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center gap-2">
+                                  <span className={cn(
+                                    "text-xs font-medium px-2 py-0.5 rounded-full",
+                                    config?.color ?? "bg-muted text-muted-foreground"
+                                  )}>
+                                    {config?.label ?? interaction.type}
+                                  </span>
+                                  {interaction.duration && (
+                                    <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                                      <Clock className="h-3 w-3" />
+                                      {interaction.duration}
+                                    </span>
+                                  )}
+                                </div>
+                                {/* Edit button — owner or admin */}
+                                {(isOwner || user?.role === "admin") && (
+                                  <button
+                                    onClick={() => setEditingInteraction(interaction)}
+                                    className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                                    title="Edit interaction"
+                                  >
+                                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536M9 13l6.5-6.5a2 2 0 012.828 2.828L11.828 15.828a2 2 0 01-1.414.586H9v-2.414A2 2 0 019.586 13z" />
+                                    </svg>
+                                  </button>
+                                )}
+                              </div>
+                              <p className="text-sm text-foreground">{interaction.summary}</p>
+                              <div className="flex items-center justify-between mt-2">
+                                <span className="text-xs text-muted-foreground">
+                                  By {interaction.created_by?.name ?? "Unknown"}
+                                </span>
+                                <span className="text-xs text-muted-foreground">
+                                  {new Date(interaction.interacted_at).toLocaleString()}
+                                </span>
+                              </div>
+                            </>
+                          )}
                         </div>
                       </div>
                     );
@@ -728,6 +851,18 @@ export default function ClientProfilePage() {
           </div>
         )}
       </div>
+
+      <EditRecordModal
+        record={editingRecord}
+        clientId={Number(id)}
+        open={editingRecord !== null}
+        onClose={() => setEditingRecord(null)}
+        onUpdated={(updated) => {
+          setRecords((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+          setEditingRecord(null);
+        }}
+      />
+
     </AppLayout>
   );
 }
@@ -820,122 +955,195 @@ function AddInteractionForm({ clientId, onSaved, onCancel }: AddInteractionFormP
   );
 }
 
- // ─── NoteCard sub-component ───────────────────────────────────────────────────
+// ─── NoteCard sub-component ───────────────────────────────────────────────────
 
-  interface NoteCardProps {
-    note: ClientNote;
-    clientId: number;
-    currentUserId: number;
-    canDelete: boolean;
-    onUpdated: (note: ClientNote) => void;
-    onDeleted: (noteId: number) => void;
-  }
+interface NoteCardProps {
+  note: ClientNote;
+  clientId: number;
+  currentUserId: number;
+  canDelete: boolean;
+  onUpdated: (note: ClientNote) => void;
+  onDeleted: (noteId: number) => void;
+}
 
-  function NoteCard({ note, clientId, currentUserId, canDelete, onUpdated, onDeleted }: NoteCardProps) {
-    const [editing, setEditing] = useState(false);
-    const [content, setContent] = useState(note.content);
-    const [saving, setSaving] = useState(false);
-    const [deleting, setDeleting] = useState(false);
+function NoteCard({ note, clientId, currentUserId, canDelete, onUpdated, onDeleted }: NoteCardProps) {
+  const [editing, setEditing] = useState(false);
+  const [content, setContent] = useState(note.content);
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
-    const isOwner = note.created_by?.id === currentUserId;
+  const isOwner = note.created_by?.id === currentUserId;
 
-    const handleSave = async () => {
-      if (!content || content === '<p></p>') return;
-      setSaving(true);
-      try {
-        const updated = await notesApi.update(clientId, note.id, content);
-        onUpdated(updated);
-        setEditing(false);
-      } finally {
-        setSaving(false);
-      }
-    };
+  const handleSave = async () => {
+    if (!content || content === '<p></p>') return;
+    setSaving(true);
+    try {
+      const updated = await notesApi.update(clientId, note.id, content);
+      onUpdated(updated);
+      setEditing(false);
+    } finally {
+      setSaving(false);
+    }
+  };
 
-    const handleDelete = async () => {
-      if (!confirm('Delete this note? This cannot be undone.')) return;
-      setDeleting(true);
-      try {
-        await notesApi.delete(clientId, note.id);
-        onDeleted(note.id);
-      } finally {
-        setDeleting(false);
-      }
-    };
+  const handleDelete = async () => {
+    if (!confirm('Delete this note? This cannot be undone.')) return;
+    setDeleting(true);
+    try {
+      await notesApi.delete(clientId, note.id);
+      onDeleted(note.id);
+    } finally {
+      setDeleting(false);
+    }
+  };
 
-    return (
-      <div className="bg-card rounded-xl border border-border/50 shadow-sm p-5">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center">
-              <span className="text-[10px] font-semibold text-primary">
-                {note.created_by?.name.split(' ').map((n) => n[0]).join('') ?? '?'}
-              </span>
-            </div>
-            <span className="text-sm font-medium text-foreground">
-              {note.created_by?.name ?? 'Unknown'}
+  return (
+    <div className="bg-card rounded-xl border border-border/50 shadow-sm p-5">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center">
+            <span className="text-[10px] font-semibold text-primary">
+              {note.created_by?.name.split(' ').map((n) => n[0]).join('') ?? '?'}
             </span>
-            {note.updated_at !== note.created_at && (
-              <span className="text-[10px] text-muted-foreground italic">edited</span>
-            )}
           </div>
-          <div className="flex items-center gap-1">
-            <span className="text-xs text-muted-foreground">
-              {new Date(note.created_at).toLocaleString()}
-            </span>
-            {/* Edit — only the creator can edit */}
-            {isOwner && !editing && (
-              <button
-                onClick={() => setEditing(true)}
-                className="ml-2 p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                title="Edit note"
-              >
-                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536M9 13l6.5-6.5a2 2 0 012.828 2.828L11.828 15.828a2 2 0 01-1.414.586H9v-2.414A2 2 0 019.586 13z" />
-                </svg>
-              </button>
-            )}
-            {/* Delete — only admin (delete_records) */}
-            {canDelete && !editing && (
-              <button
-                onClick={handleDelete}
-                disabled={deleting}
-                className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
-                title="Delete note"
-              >
-                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7V4h6v3M4 7h16" />
-                </svg>
-              </button>
-            )}
+          <span className="text-sm font-medium text-foreground">
+            {note.created_by?.name ?? 'Unknown'}
+          </span>
+          {note.updated_at !== note.created_at && (
+            <span className="text-[10px] text-muted-foreground italic">edited</span>
+          )}
+        </div>
+        <div className="flex items-center gap-1">
+          <span className="text-xs text-muted-foreground">
+            {new Date(note.created_at).toLocaleString()}
+          </span>
+          {/* Edit — only the creator can edit */}
+          {isOwner && !editing && (
+            <button
+              onClick={() => setEditing(true)}
+              className="ml-2 p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+              title="Edit note"
+            >
+              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536M9 13l6.5-6.5a2 2 0 012.828 2.828L11.828 15.828a2 2 0 01-1.414.586H9v-2.414A2 2 0 019.586 13z" />
+              </svg>
+            </button>
+          )}
+          {/* Delete — only admin (delete_records) */}
+          {canDelete && !editing && (
+            <button
+              onClick={handleDelete}
+              disabled={deleting}
+              className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+              title="Delete note"
+            >
+              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7V4h6v3M4 7h16" />
+              </svg>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Content — view or edit mode */}
+      {editing ? (
+        <div>
+          <RichTextEditor value={content} onChange={setContent} minHeight="120px" />
+          <div className="flex gap-2 mt-3">
+            <Button size="sm" disabled={saving} onClick={handleSave}>
+              {saving ? 'Saving...' : 'Save Changes'}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => { setEditing(false); setContent(note.content); }}
+            >
+              Cancel
+            </Button>
           </div>
         </div>
+      ) : (
+        <CollapsibleNote html={note.content} charLimit={300} />
+      )}
+    </div>
+  );
+}
 
-        {/* Content — view or edit mode */}
-        {editing ? (
-          <div>
-            <RichTextEditor value={content} onChange={setContent} minHeight="120px" />
-            <div className="flex gap-2 mt-3">
-              <Button size="sm" disabled={saving} onClick={handleSave}>
-                {saving ? 'Saving...' : 'Save Changes'}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => { setEditing(false); setContent(note.content); }}
-              >
-                Cancel
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <div
-            className="prose prose-sm max-w-none text-foreground
-            prose-strong:text-foreground prose-em:text-muted-foreground
-            prose-ul:mt-2 prose-li:mt-0.5 prose-p:my-1.5"
-            dangerouslySetInnerHTML={{ __html: note.content }}
+// ─── EditInteractionInline ────────────────────────────────────────────────────
+
+interface EditInteractionInlineProps {
+  interaction: ClientInteraction;
+  clientId: number;
+  onSaved: (updated: ClientInteraction) => void;
+  onCancel: () => void;
+}
+
+function EditInteractionInline({ interaction, clientId, onSaved, onCancel }: EditInteractionInlineProps) {
+  const [type, setType] = useState<InteractionType>(interaction.type);
+  const [summary, setSummary] = useState(interaction.summary);
+  const [duration, setDuration] = useState(
+    interaction.duration ? interaction.duration.replace(' min', '') : ''
+  );
+  const [saving, setSaving] = useState(false);
+
+  const inputClasses =
+    "w-full h-9 px-3 rounded-lg bg-muted/40 border border-border text-sm " +
+    "focus:outline-none focus:ring-2 focus:ring-ring/30 transition-all";
+
+  const handleSave = async () => {
+    if (!summary.trim()) return;
+    setSaving(true);
+    try {
+      const updated = await interactionsApi.update(clientId, interaction.id, {
+        type,
+        summary,
+        duration_minutes: duration ? Number(duration) : undefined,
+      });
+      onSaved(updated);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="text-xs text-muted-foreground mb-1 block">Type</label>
+          <select value={type} onChange={(e) => setType(e.target.value as InteractionType)} className={inputClasses}>
+            <option value="call">Phone Call</option>
+            <option value="email">Email</option>
+            <option value="visit">In-Person Visit</option>
+            <option value="meeting">Meeting</option>
+          </select>
+        </div>
+        <div>
+          <label className="text-xs text-muted-foreground mb-1 block">Duration (minutes)</label>
+          <input
+            type="number"
+            value={duration}
+            onChange={(e) => setDuration(e.target.value)}
+            placeholder="e.g. 30"
+            className={inputClasses}
           />
-        )}
+        </div>
       </div>
-    );
-  }
+      <div>
+        <label className="text-xs text-muted-foreground mb-1 block">Summary</label>
+        <textarea
+          value={summary}
+          onChange={(e) => setSummary(e.target.value)}
+          rows={3}
+          className="w-full px-3 py-2 rounded-lg bg-muted/40 border border-border text-sm focus:outline-none focus:ring-2 focus:ring-ring/30 resize-none"
+        />
+      </div>
+      <div className="flex gap-2">
+        <Button size="sm" disabled={saving || !summary.trim()} onClick={handleSave}>
+          {saving ? 'Saving...' : 'Save Changes'}
+        </Button>
+        <Button variant="outline" size="sm" onClick={onCancel}>Cancel</Button>
+      </div>
+    </div>
+  );
+}

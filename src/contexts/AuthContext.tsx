@@ -17,11 +17,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // On app load, if a token exists re-fetch the user
   useEffect(() => {
-    const token = localStorage.getItem('auth_token');
+    const token = sessionStorage.getItem('auth_token');
     if (token) {
       authApi.getUser()
         .then(setUser)
-        .catch(() => localStorage.removeItem('auth_token'))
+        .catch(() => sessionStorage.removeItem('auth_token'))
         .finally(() => setLoading(false));
     } else {
       setLoading(false);
@@ -32,7 +32,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLoading(true);
     try {
       const { user, token } = await authApi.login(email, password);
-      localStorage.setItem('auth_token', token);
+      sessionStorage.setItem('auth_token', token);
       setUser(user);
     } finally {
       setLoading(false);

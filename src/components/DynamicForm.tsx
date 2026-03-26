@@ -1,19 +1,30 @@
+// src/components/DynamicForm.tsx
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import type { TemplateField } from "@/services/api";
 
 interface DynamicFormProps {
   fields: TemplateField[];
-  onSubmit: (data: Record<string, any>) => void;
+  onSubmit: (data: Record<string, unknown>) => void;
   loading?: boolean;
   submitLabel?: string;
+  initialData?: Record<string, unknown>;
 }
 
-export function DynamicForm({ fields, onSubmit, loading, submitLabel = "Submit" }: DynamicFormProps) {
-  const [values, setValues] = useState<Record<string, any>>({});
+export function DynamicForm({
+  fields,
+  onSubmit,
+  loading,
+  submitLabel = "Submit",
+  initialData,
+}: DynamicFormProps) {
+  // Seed state from initialData if provided, otherwise start empty
+  const [values, setValues] = useState<Record<string, unknown>>(
+    initialData ?? {}    // ← use initialData
+  );
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const setValue = (name: string, value: any) => {
+  const setValue = (name: string, value: unknown) => {
     setValues((prev) => ({ ...prev, [name]: value }));
     setErrors((prev) => ({ ...prev, [name]: "" }));
   };
@@ -34,7 +45,9 @@ export function DynamicForm({ fields, onSubmit, loading, submitLabel = "Submit" 
   };
 
   const inputClasses =
-    "w-full h-10 px-3 rounded-lg bg-muted/40 border border-border text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-primary/30 transition-all";
+    "w-full h-10 px-3 rounded-lg bg-muted/40 border border-border text-sm text-foreground " +
+    "placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/30 " +
+    "focus:border-primary/30 transition-all";
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
@@ -47,14 +60,14 @@ export function DynamicForm({ fields, onSubmit, loading, submitLabel = "Submit" 
 
           {field.type === "textarea" ? (
             <textarea
-              value={values[field.name] || ""}
+              value={(values[field.name] as string) || ""}
               onChange={(e) => setValue(field.name, e.target.value)}
               className={inputClasses + " min-h-[100px] py-2.5 resize-y"}
               placeholder={`Enter ${field.label.toLowerCase()}`}
             />
           ) : field.type === "select" ? (
             <select
-              value={values[field.name] || ""}
+              value={(values[field.name] as string) || ""}
               onChange={(e) => setValue(field.name, e.target.value)}
               className={inputClasses}
             >
@@ -65,10 +78,33 @@ export function DynamicForm({ fields, onSubmit, loading, submitLabel = "Submit" 
                 </option>
               ))}
             </select>
+          ) : field.type === "boolean" ? (
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id={field.name}
+                checked={Boolean(values[field.name])}
+                onChange={(e) => setValue(field.name, e.target.checked)}
+                className="rounded border-border h-4 w-4"
+              />
+              <label htmlFor={field.name} className="text-sm text-muted-foreground">
+                {field.label}
+              </label>
+            </div>
+          ) : field.type === "number" ? (
+            <input
+              type="number"
+              value={(values[field.name] as number) ?? ""}
+              min={(field.validation as { min?: number })?.min}
+              max={(field.validation as { max?: number })?.max}
+              onChange={(e) => setValue(field.name, e.target.valueAsNumber)}
+              className={inputClasses}
+              placeholder={`Enter ${field.label.toLowerCase()}`}
+            />
           ) : (
             <input
               type={field.type}
-              value={values[field.name] || ""}
+              value={(values[field.name] as string) || ""}
               onChange={(e) => setValue(field.name, e.target.value)}
               className={inputClasses}
               placeholder={`Enter ${field.label.toLowerCase()}`}
@@ -81,7 +117,11 @@ export function DynamicForm({ fields, onSubmit, loading, submitLabel = "Submit" 
         </div>
       ))}
 
-      <Button type="submit" disabled={loading} className="active:scale-[0.97] transition-transform">
+      <Button
+        type="submit"
+        disabled={loading}
+        className="active:scale-[0.97] transition-transform"
+      >
         {loading ? "Submitting..." : submitLabel}
       </Button>
     </form>

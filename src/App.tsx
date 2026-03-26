@@ -16,6 +16,10 @@ import UnauthorizedPage from "./pages/UnauthorizedPage";
 import ProfilePage from "./pages/ProfilePage";
 import NotFound from "./pages/NotFound";
 import LoginPage from "./pages/LoginPage";
+import UsersPage from "./pages/UsersPage";
+import UserProfilePage from "./pages/UserProfilePage";
+import UserFormPage from "./pages/UserFormPage";
+import RolesPage from "./pages/RolesPage";
 
 const queryClient = new QueryClient();
 
@@ -41,7 +45,6 @@ const App = () => (
             <Route path="/clients/:id" element={<ProtectedRoute permission="view_clients"><ClientProfilePage /></ProtectedRoute>} />
             <Route path="/clients/:id/edit" element={<ProtectedRoute permission="edit_clients"><ClientFormPage /></ProtectedRoute>} />
             <Route path="/clients/:clientId/records/new/:templateKey" element={<DynamicRecordFormPage />} />
-            // Change all three template routes to:
             <Route path="/templates" element={
               <ProtectedRoute permission="manage_templates"><TemplatesPage /></ProtectedRoute>
             } />
@@ -50,6 +53,21 @@ const App = () => (
             } />
             <Route path="/templates/:id/edit" element={
               <ProtectedRoute permission="manage_templates"><TemplateFormPage /></ProtectedRoute>
+            } />
+            <Route path="/users" element={
+              <ProtectedRoute permission="manage_users"><UsersPage /></ProtectedRoute>
+            } />
+            <Route path="/users/new" element={
+              <ProtectedRoute permission="manage_users"><UserFormPage /></ProtectedRoute>
+            } />
+            <Route path="/users/:id" element={
+              <ProtectedRoute permission="manage_users"><UserProfilePage /></ProtectedRoute>
+            } />
+            <Route path="/users/:id/edit" element={
+              <ProtectedRoute permission="manage_users"><UserFormPage /></ProtectedRoute>
+            } />
+            <Route path="/roles" element={
+              <ProtectedRoute permission="manage_users"><RolesPage /></ProtectedRoute>
             } />
 
             <Route path="*" element={<NotFound />} />
